@@ -1,6 +1,11 @@
 #########Build SOEP Dataset
 
-libraries = c("haven","rstudioapi", "readxl", "xlsx", "readr", "readstata13", "ggplot2", "ggthemes", "dplyr", "tidyverse", "stargazer", "texreg") #, "spatstat", "Hmisc", "haven","foreign",
+libraries = c("haven",
+              "rstudioapi", 
+              "ggplot2", 
+              "ggthemes", 
+              "tidyverse", 
+              "stargazer") #, "spatstat", "Hmisc", "haven","foreign",
 lapply(libraries, function(x) if (!(x %in% installed.packages())) {
   install.packages(x)
 })
@@ -8,74 +13,61 @@ lapply(libraries, library, quietly = TRUE, character.only = TRUE)
 
 
 #Get citations
-lapply(libraries, citation)
+#lapply(libraries, citation)
 #(de-)activate areas of code
-load_raw_dataset=T #(15 minutes)
+load_raw_dataset=F #(2 minutes)
 build_main_dataset=T #(30 minutes)
-build_parent_dataset=T #(20 minutes)
-build_sibling_family_dataset=T #(5minutes)
+build_parent_dataset=F #(20 minutes)
+build_sibling_family_dataset=F #(5minutes)
 
 ######Insert path to SOEP Stata Datasets
-path_soep<-"Y:/XXXX/XXXX/XXXX"
+path_soep<-"D:/Uni/Master Economics/Masterarbeit Education/SOEP/raw_data/SOEP"
 
 
 
 
 
 
-#set working directory to location of script
-setwd(dirname(getSourceEditorContext()$path))
 
 if(load_raw_dataset==T){
   
   #load relevant dataset
-  hgen<-read.dta13(paste(path_soep,"hgen.dta", sep="/"))
-  pgen<-read.dta13(paste(path_soep,"pgen.dta", sep="/"))
-  ppath<-read.dta13(paste(path_soep,"ppath.dta", sep="/"))
-  bioparen<-read.dta13(paste(path_soep,"bioparen.dta", sep="/"))
-  #pbrutto<-read.dta13(paste(path_soep,"pbrutto.dta", sep="/"))
+  hgen<-read_dta(paste(path_soep,"hgen.dta", sep="/"))
+  pgen<-read_dta(paste(path_soep,"pgen.dta", sep="/"))
+  ppath<-read_dta(paste(path_soep,"ppath.dta", sep="/"))
+  bioparen<-read_dta(paste(path_soep,"bioparen.dta", sep="/"))
+  #pequiv<-read_dta(paste(path_soep,"pequiv.dta", sep="/"))
   
   #Extract relevant variables and build a dataset for each person and year and a dataset with metadata for a person.
-  h_data1<-hgen[,c("hid", "syear", "hgtyp1hh", "hgtyp2hh", "hgnuts1")]
-  h_data1[h_data1<0]<-NA
-  p_data1<-pgen[,c("hid", "pid", "syear","pgmonth","pgpsbil","pgpsbilo", "pgpbbilo", "pgpsbila", "pgpbbila", "pgpbbil01", "pgpbbil02", "pgpbbil03", "pgbilzeit")]
-  p_data1[p_data1<0]<-NA
-  p_meta1<-ppath[, c("pid", "sex", "gebjahr", "gebmonat", "eintritt", "erstbefr", "austritt","letztbef", "loc1989", "todjahr", "immiyear", "migback", "corigin", "birthregion","arefback")]
-  p_meta1[p_meta1<0]<-NA
-  p_meta2<-bioparen[,c("pid", "fnr", "mnr", "fsedu", "msedu", "fprofedu", "mprofedu", "locchild1", "fnat", "mnat", "morigin", "forigin")]
-  p_meta2[p_meta2<0]<-NA
-  p_meta2[p_meta2==0]<-NA
-  p_meta1$age_migration<-p_meta1$immiyear-p_meta1$gebjahr
-  data_meta<-merge(p_meta1, p_meta2, by=c("pid"), all.x = T, all.y=F)
-  data<-merge(p_data1, h_data1, by=c("hid", "syear"), all.x = T, all.y=F)
-  data<-merge(data, data_meta[,c("pid", "gebjahr", "gebmonat")], by=c("pid"), all.x=T, all.y = F)
+  hgen_rel<-hgen[,c("hid", "syear", "hgtyp1hh", "hgtyp2hh", "hgnuts1")]
+  hgen_rel[hgen_rel<0]<-NA
+  pgen_rel<-pgen[,c("hid", "pid", "syear","pgmonth","pgpsbil", "pgpbbil01", "pgpbbil02", "pgpbbil03", "pgbilzeit")]
+  pgen_rel[pgen_rel<0]<-NA
+  ppath_rel<-ppath[, c("pid", "psample", "sex", "gebjahr", "gebmonat", "eintritt", "erstbefr", "austritt","letztbef", "loc1989", "todjahr", "immiyear", "migback", "corigin", "birthregion","arefback")]
+  ppath_rel[ppath_rel<0]<-NA
+  bioparen_rel<-bioparen[,c("pid", "fnr", "mnr", "fsedu", "msedu", "fprofedu", "mprofedu", "locchildh", "locchild1", "fnat", "mnat", "morigin", "forigin")]
+  bioparen_rel[bioparen_rel<0]<-NA
+  bioparen_rel[bioparen_rel==0]<-NA
+  ppath_rel$age_migration<-ppath_rel$immiyear-ppath_rel$gebjahr
+  data_meta<-merge(ppath_rel, bioparen_rel, by=c("pid"), all.x = T, all.y=F)
+  data<-merge(pgen_rel, hgen_rel, by=c("hid", "syear"), all.x = T, all.y=F)
+  data<-merge(data, data_meta[,c("pid", "gebjahr")], by=c("pid"), all.x=T, all.y = F)
   
   
   
   #calculate the age of the person during the survey.
   data$age_survey<-data$syear-data$gebjahr
   
-  
   #Calculate the age at the first and last time an individual was surveyed
-  data_meta$age_first_survey<-rep(NA, nrow(data_meta))
-  data_meta$age_last_survey<-rep(NA, nrow(data_meta))
-  for(i in 1:nrow(data_meta)){
-    if( i/10000==round(i/10000)) print(paste0("progress:",i/nrow(data_meta)*100, "%"))
-    pid<-data_meta$pid[i]
-    if(sum(data$pid==pid)>0) {
-      ages<-data$age_survey[data$pid==pid]
-      data_meta$age_first_survey[i]<-min(ages, na.rm = T)
-      data_meta$age_last_survey[i]<-max(ages, na.rm = T)
-    } else {
-      data_meta$age_first_survey[i]<-NA
-      data_meta$age_last_survey[i]<-NA
-      
-    }
-  }
+  data_meta$age_entry<-data_meta$eintritt-data_meta$gebjahr
+  data_meta$age_first_survey<-data_meta$erstbefr-data_meta$gebjahr
+  data_meta$age_last_survey<-data_meta$letztbef-data_meta$gebjahr
+  data_meta$age_exit<-data_meta$austritt-data_meta$gebjahr
   
-  write_excel_csv2(data, "Datasets/p_data.csv")
-  write_excel_csv2(data_meta, "Datasets/p_meta_data.csv")
   
+  write_dta(data=data, path="Data/p_data.dta")
+  write_dta(data=data_meta, path="Data/p_meta_data.dta")
+  rm(hgen, pgen, ppath, bioparen,hgen_rel, pgen_rel, ppath_rel, bioparen_rel, data, data_meta)
 }
 
 
@@ -84,88 +76,83 @@ if(load_raw_dataset==T){
 
 #Build main dataset which transforms ongitudinal data for Bundesland and Years of Education to Cross-Sectional Data
 if (build_main_dataset==T){
-  data<-read.csv("Datasets/p_data.csv", sep=";", dec=",", check.names = F)
-  data_meta<-read.csv("Datasets/p_meta_data.csv", sep=";", dec=",", check.names = F)
+  data<-read_dta("Data/p_data.dta")
+  data_meta<-read_dta("Data/p_meta_data.dta")
+  #recoding Bildungsvariable
+  data$pgpsbil_recoded<-data$pgpsbil
+  attributes(data$pgpsbil_recoded)$labels<-NULL
+  #noch kein Abschluss -> -2
+  data$pgpsbil_recoded[data$pgpsbil==7]<- -2
+  newval<--2
+  names(newval)<-"[-2] Noch kein Abschluss"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[8] Keine Schule besucht -> 1
+  #[6] Ohne Abschluss verlassen -> 1
+  data$pgpsbil_recoded[data$pgpsbil==6]<--1
+  data$pgpsbil_recoded[data$pgpsbil==8]<--1
+  newval<--1
+  names(newval)<-"[-1] Keine Schule besucht/ohne Abschluss verlassen"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[5] Anderer Abschluss -> -0
+  data$pgpsbil_recoded[data$pgpsbil==5]<-0
+  newval<-0
+  names(newval)<-"[0] Anderer Abschluss"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[1] Hauptschulabschluss -> 1
+  newval<-1
+  names(newval)<-"[1] Hauptschulabschluss"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[2] Realschulabschluss -> 2
+  data$pgpsbil_recoded[data$pgpsbil==2]<-2
+  newval<-2
+  names(newval)<-"[4] Realschulabschluss"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[3] Fachhochschulreife -> 3
+  newval<-3
+  names(newval)<-"[3] Fachhochschulreife"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  #[4] Abitur -> 4
+  data$pgpsbil_recoded[data$pgpsbil==4]<-4
+  newval<-4
+  names(newval)<-"Abitur"
+  attributes(data$pgpsbil_recoded)$labels<-c(attributes(data$pgpsbil_recoded)$labels, newval)
+  
+  
+  #par(mfrow = c(1, 2))
+  #attributes(data$pgpsbil)
+  #attributes(data$pgpsbil_recoded)
+  #hist(data$pgpsbil)
+  #hist(data$pgpsbil_recoded)
+  
   #Remove all individuals who left the survey before the age of 21
-  data_analysis<-data_meta[which(data_meta$age_last_survey>20),c("pid","sex","gebjahr","gebmonat", "loc1989", "migback", "age_migration", "birthregion","arefback","locchild1","fnr","mnr","age_first_survey","age_last_survey")]
-  #Survey Years
-  data_analysis$syears<-rep(NA, nrow(data_analysis))
-  #Household ids
-  data_analysis$hids<-rep(NA, nrow(data_analysis))
+  data_analysis<-data_meta
+  
   #Years of education
-  data_analysis$years_of_education<-rep(NA, nrow(data_analysis))
-  #Various state IDs
-  data_analysis$bundesland<-rep(NA, nrow(data_analysis))
-  data_analysis$bundesland_time<-rep(NA, nrow(data_analysis))
-  data_analysis$bundesland_age_0_20<-rep(NA, nrow(data_analysis))
-  data_analysis$bundesland_change_0_18<-rep(NA, nrow(data_analysis))
+  data_analysis$pgpsbilzeit_max<-rep(NA, nrow(data_analysis))
+  #Highest school Leaving Degree
+  data_analysis$pgpsbil_recoded_max<-rep(NA, nrow(data_analysis))
+  #Highest Education Degree
+  data_analysis$pgpbbil01_max<-rep(NA, nrow(data_analysis))
+  #State when entered survey
+  data_analysis$bundesland_eintritt<-rep(NA, nrow(data_analysis))
+  data_analysis$bundesland_age18<-rep(NA, nrow(data_analysis))
   for (i in 1:nrow(data_analysis)){
     if( i/1000==round(i/1000)) print(paste0("progress:",i/nrow(data_analysis)*100, "%"))
-    bundesland<-NA
-    bundesland_age_0_20<-NA
-    bundesland_change_0_18<-NA
-    bundesland_time<-NA
-    syears<-NA
     pid<-data_analysis$pid[i]
     data_person<-data[data$pid==pid,]
     data_person<-data_person[order(data_person$syear, decreasing = F), ]
     
     #Use the highest years of education a person reported in the survey
-    if (length(na.omit(data_person$pgbilzeit))>0) data_analysis$years_of_education[i]<-max(data_person$pgbilzeit, na.rm = T)
-  
-    #Paste all HH-Ids in one string and all survey years in one string
-    data_analysis$hids[i]<-paste0(data_person$hid[-which(is.na(data_person$hgnuts1))], collapse = "_")
-    
-    syears<-data_person$syear
-    if( any(is.na(data_person$hgnuts1))) syears<-syears[-which(is.na(data_person$hgnuts1))]
-    data_analysis$syears[i]<-paste0(syears, collapse = "_")
-    #vector of all states a person's household lived in the years a person was surveyed
-    bundesland<-data_person$hgnuts1
-    bundesland<-na.omit(bundesland)
-    #save all states a person lived in
-    if(length(bundesland)>0) data_analysis$bundesland_time[i]<-paste(bundesland, sep="_", collapse="_")
-    bundesland_all_obs<-bundesland
-    bundesland<-unique(bundesland)
-    if(length(bundesland)>0){
-      #Paste all States in one string (if there are several and assign it to bundesland
-      if (length(bundesland)>1) bundesland<-paste(bundesland, sep="_", collapse="_")
-      if (length(bundesland)==1) data_analysis$bundesland[i]<-bundesland
-      
-      #identify the state a person lived in before the age of 20 if a person entered the survey before the age of 20. 
-      #If there is a unique state for the years before a person was 20 (or 19 or 18), we assign it to bundesland_age_0_20
-      #If there are several states for the years a person is between 0 and 18 years old, we paste them to one string and assign them. Additionally we assign bundesland_change_0_18 a TRUE.
-      bula_child<-NA
-      bula_20<-bundesland_all_obs[syears %in% data_analysis$gebjahr[i]:(data_analysis$gebjahr[i]+20)]
-      if (length(bula_20)>0){
-        if (length(unique(bula_20))==1) bula_child=unique(bula_20) else {
-          bula_19<-na.omit(bundesland_all_obs[syears %in% data_analysis$gebjahr[i]:(data_analysis$gebjahr[i]+19)])
-          if (length(unique(bula_19))==1) bula_child=unique(bula_19) else {
-            bula_18<-na.omit(bundesland_all_obs[syears %in% data_analysis$gebjahr[i]:(data_analysis$gebjahr[i]+18)])
-            if (length(unique(bula_18))==1) bula_child=unique(bula_18) else {
-              bula_child<-NA
-              bundesland_change_0_18=T
-            }
-          }
-        }
-      } else {
-        bula_child<-NA
-      }
-      
-      data_analysis$bundesland_age_0_20[i]<-bula_child
-      data_analysis$bundesland_change_0_18[i]<-bundesland_change_0_18
-    } else {
-      data_analysis$bundesland[i]<-NA
-      data_analysis$bundesland_change_0_18[i]<-NA
-      data_analysis$bundesland_age_0_20[i]<-NA
-    }
-    
+    if (length(na.omit(data_person$pgbilzeit))>0) data_analysis$pgpsbilzeit_max[i]<-max(data_person$pgbilzeit, na.rm = T)
+    #Use the highest years of education a person reported in the survey
+    if (length(na.omit(data_person$pgpsbil_recoded))>0) data_analysis$pgpsbil_recoded_max[i]<-max(data_person$pgpsbil_recoded, na.rm = T)
+    #Use the highest years of education a person reported in the survey
+    if (length(na.omit(data_person$pgpbbil01))>0) data_analysis$pgpbbil01_max[i]<-max(data_person$pgpbbil01, na.rm = T)
+    #determine state of entry and at age 18
+    if (nrow(data_person)>0) data_analysis$bundesland_eintritt[i]<-data_person$hgnuts1[1]
+    if (TRUE %in% (data_person$age_survey==18)) data_analysis$bundesland_age18[i]<-data_person$hgnuts1[data_person$age_survey==18]
   }
-  data_analysis$bundesland_eintritt<-rep(NA, nrow(data_analysis))
-  for (row in 1:nrow(data_analysis)){
-    data_analysis$bundesland_eintritt[row]<-unlist(str_split(data_analysis$bundesland[row], "_"))[1]
-  }
-  
-  write_excel_csv2(data_analysis, "Datasets/data_analysis_step1.csv")
+  write_dta(data_analysis, "Data/data_analysis_step1.dta")
 }
 
 
